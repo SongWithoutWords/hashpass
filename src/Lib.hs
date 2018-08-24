@@ -13,6 +13,7 @@ import qualified Data.ByteString.Char8 as C8
 import Data.ByteString.Conversion.To
 import Data.ByteString.Conversion.From
 import Data.List(find)
+import Data.Map as M
 import Data.Word
 
 import Debug.Trace
@@ -20,16 +21,17 @@ import Debug.Trace
 import Crypto.Hash.SHA512
 
 someFunc :: IO ()
-someFunc = print $ compute (Master "asdf") $ Params
+someFunc = B.putStrLn $ compute (Master "asdf") $ Params
   (Service "snarwalk")
   (Salt 0)
-  (Iteration 0)
-  (Requirements
-   (LowerCount 2)
-   (UpperCount 0)
-   (NumberCount 4)
-   (SymbolCount 4)
-   (AnyCount 4)
+  (Iteration 3)
+  (Requirements $ M.fromList
+   [ (LowerCase, 0)
+   , (UpperCase, 0)
+   , (Number, 0)
+   , (Symbol, 0)
+   , (Any, 16)
+   ]
   )
 
 newtype Master = Master ByteString
@@ -44,28 +46,17 @@ newtype Iteration = Iteration Word
 newtype Salt = Salt Word64
   deriving(Eq, Show)
 
-newtype LowerCount = LowerCount Word
-  deriving(Enum, Eq, Num, Integral, Ord, Real, Show)
+data Range
+  = LowerCase
+  | UpperCase
+  | Number
+  | Symbol
+  | Any
+  deriving(Enum, Eq, Ord, Show)
 
-newtype UpperCount = UpperCount Word
-  deriving(Enum, Eq, Num, Integral, Ord, Real, Show)
-
-newtype NumberCount = NumberCount Word
-  deriving(Enum, Eq, Num, Integral, Ord, Real, Show)
-
-newtype SymbolCount = SymbolCount Word
-  deriving(Enum, Eq, Num, Integral, Ord, Real, Show)
-
-newtype AnyCount = AnyCount Word
-  deriving(Enum, Eq, Num, Integral, Ord, Real, Show)
-
-data Requirements = Requirements
-  { lowerCount :: LowerCount
-  , upperCount :: UpperCount
-  , numberCount :: NumberCount
-  , symbolCount :: SymbolCount
-  , anyCount :: AnyCount
-  }
+-- The number of characters within each range that are required
+-- newtype Requirements = Requirements (TotalMap Range Word8)
+newtype Requirements = Requirements (M.Map Range Word8)
   deriving(Eq, Show)
 
 data Params = Params
@@ -132,50 +123,44 @@ integerFromBytes = B.foldl f 0 where
 passwordFromDigest :: Requirements -> ByteString -> ByteString
 passwordFromDigest req = (passwordFromInteger req) . integerFromBytes
 
--- passwordFromInteger :: Requirements -> Integer -> ByteString
--- passwordFromInteger = B.Char8.pack . passwordFromInteger'
+rangeValues :: Range -> [Char]
+rangeValues r = case r of
+  LowerCase -> ['a' .. 'z']
+  UpperCase -> ['A' .. 'X']
+  Number -> ['0' .. '9']
+  Symbol -> ['!' .. '/'] ++ [':' .. '@'] ++ ['[' .. '`'] ++ ['{' .. '~']
+  Any -> concatMap rangeValues [LowerCase .. Symbol]
 
--- newtype FirstChar = FirstChar Char
-newtype Count = Count Word8
-newtype Mapping = Mapping (Word8 -> Char)
-data Range = Range Count Mapping
+rangeCount :: Range -> Int
+rangeCount = length . rangeValues
 
--- type WeightedRanges = [(Integer, Range)]
-
-lower = Range (Count 26) $ Mapping $ \w -> B.w2c $ B.c2w 'a' + w
-upper = Range (Count 26) $ Mapping $ \w -> B.w2c $ B.c2w 'A' + w
-number = Range (Count 10) $ Mapping $ \w -> B.w2c $ B.c2w '0' + w
+rangeMapping :: Range -> Integer -> Char
+rangeMapping r i = (rangeValues r) !! fromIntegral i
 
 chooseFromRange :: Range -> Integer -> (Integer, Char)
-chooseFromRange (Range (Count n) (Mapping f)) i =
-  ( i `div` (toInteger n)
-  , f $ fromInteger $ i `mod` (toInteger n))
+chooseFromRange r i =
+  ( i `div` (toInteger $ rangeCount r)
+  , rangeMapping r $ i `mod` (toInteger $ rangeCount r))
 
--- chooseFromWeightedRanges :: [(Integer, Range)] -> Integer -> (Integer, Char)
--- chooseFromWeightedRanges weightedRanges i =
-  -- let 
+chooseRange :: Map Range Word8 -> Integer -> Range
+chooseRange ranges roll =
+  chooseRange' (M.toList ranges) roll
+
+chooseRange' :: [(Range, Word8)] -> Integer -> Range
+chooseRange' [(range, _)] _ = range
+chooseRange' ((range, weight) : rest) roll =
+  if roll < toInteger weight
+  then range
+  else chooseRange' rest (roll - toInteger weight)
 
 passwordFromInteger :: Requirements -> Integer -> ByteString
-passwordFromInteger reqs i =
-  -- let sum = sum [toInteger lower, toInteger upper, toInteger number]
+passwordFromInteger (Requirements rangeWeights) i =
   let
-    sum = toInteger (lowerCount reqs) + toInteger (upperCount reqs) + toInteger (numberCount reqs)
-    index = i `mod` sum
-    i' = i `div` sum
-  in if sum <= 0 then ""
-  else if index < toInteger (lowerCount reqs)
-    then let (i'', char) = chooseFromRange lower i'
-         in C8.cons char $ passwordFromInteger reqs{lowerCount = lowerCount reqs - LowerCount 1} i''
-  else if index < toInteger (lowerCount reqs) + toInteger (upperCount reqs)
-    then let (i'', char) = chooseFromRange upper i'
-         in C8.cons char $ passwordFromInteger reqs{upperCount = upperCount reqs - UpperCount 1} i''
-  else
-    let (i'', char) = chooseFromRange number i'
-         in C8.cons char $ passwordFromInteger reqs{numberCount = numberCount reqs - NumberCount 1} i''
-
-  -- if lower > LowerCount 0
-  -- then C8.cons
-  --   (['a' .. 'z'] !! (fromInteger $ i `mod` 26))
-  --   $ passwordFromInteger (Requirements (lower - LowerCount 1) upper number symbol any ) (i `div` 26)
-  -- else ""
-
+    weightSum = toInteger $ M.foldl' (+) 0 rangeWeights
+    rangeChoiceIndex = i `mod` weightSum
+    i' = i `div` weightSum
+  in if weightSum <= 0 then ""
+  else let
+    range = chooseRange rangeWeights rangeChoiceIndex
+    (i'', char) = chooseFromRange range i'
+  in C8.cons char $ passwordFromInteger (Requirements $ M.adjust (subtract 1) range rangeWeights) i''
