@@ -76,8 +76,12 @@ newtype AllParams = AllParams [Params]
 data Command
   = Add Service Params
   | Increment Service
-  | DisplayAllParams
+  -- | DisplayAllParams
   | Query Service
+
+data Result
+  = UpdateFile AllParams
+  | ProvidePassword AllParams
 
 isService :: Service -> Params -> Bool
 isService s = (== s) . service
