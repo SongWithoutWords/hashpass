@@ -16,9 +16,10 @@ import Data.List(find)
 import Data.Map as M
 import Data.Word
 
-import Debug.Trace
-
-import Crypto.Hash.SHA512
+import Crypto.Hash(Digest, hash)
+import Crypto.Hash.Algorithms(SHA3_512)
+import qualified Crypto.KDF.Argon2 as Ar2
+-- import qualified Crypto.Scrypt as S
 
 someFunc :: IO ()
 someFunc = B.putStrLn $ compute (Master "asdf") $ Params
@@ -30,7 +31,7 @@ someFunc = B.putStrLn $ compute (Master "asdf") $ Params
    , (UpperCase, 0)
    , (Number, 0)
    , (Symbol, 0)
-   , (Any, 16)
+   , (Any, 255)
    ]
   )
 
@@ -124,7 +125,7 @@ integerFromBytes :: ByteString -> Integer
 integerFromBytes = B.foldl f 0 where
   f a b = a `shiftL` 8 .|. fromIntegral b
 
-passwordFromDigest :: Requirements -> ByteString -> ByteString
+passwordFromDigest :: Requirements -> Digest SHA3_512 -> ByteString
 passwordFromDigest req = (passwordFromInteger req) . integerFromBytes
 
 rangeValues :: Range -> [Char]

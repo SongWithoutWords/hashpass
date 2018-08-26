@@ -24,7 +24,7 @@ dependencies:
 - bytestring
 - bytestring-conversion
 - containers
-- cryptohash
+- cryptonite
 
 library:
   source-dirs: src
