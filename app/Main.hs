@@ -33,10 +33,17 @@ readMaster :: IO Master
 readMaster = undefined
 
 readParams :: IO AllParams
-readParams = undefined
+readParams = do
+  path <- filePath
+  read <$> readFile path
 
 writeParams :: AllParams -> IO ()
-writeParams = undefined
+writeParams params = do
+  path <- filePath
+  writeFile path (show params)
+
+transformParams :: (AllParams -> AllParams) -> IO ()
+transformParams f = (f <$> readParams) >>= writeParams
 
 parseOptions :: IO Options
 parseOptions = execParser options
