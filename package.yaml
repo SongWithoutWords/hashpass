@@ -25,6 +25,7 @@ dependencies:
 - bytestring-conversion
 - containers
 - cryptonite
+- integer-logarithms
 
 library:
   source-dirs: src

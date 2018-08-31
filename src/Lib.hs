@@ -16,6 +16,8 @@ import Data.List(find)
 import Data.Map as M
 import Data.Word
 
+import Math.NumberTheory.Logarithms
+
 import Crypto.Hash(Digest, hash)
 import Crypto.Hash.Algorithms(SHA3_512)
 import qualified Crypto.KDF.Argon2 as Ar2
@@ -107,6 +109,14 @@ increment s (AllParams paramList) = AllParams $
        then params {iteration = (iteration params) + 1}
        else params)
     paramList
+
+factorial :: Integer -> Integer
+factorial n = if n <= 1 then 1 else n * factorial (n - 1)
+
+numBytesRequired :: Requirements -> Int
+numBytesRequired (Requirements reqs) = (`div` 8) $ integerLog2 $
+  (factorial $ toInteger $ sum reqs) -- * (product $ map reqs)
+  -- TODO: Add the product of all requirements
 
 query :: Master -> Service -> AllParams -> Maybe ByteString
 query m s (AllParams paramList) =
