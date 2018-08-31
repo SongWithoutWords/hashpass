@@ -1,7 +1,11 @@
 module Main where
 
-import Options.Applicative
 import Data.Semigroup ((<>))
+import Data.Text.IO
+import System.Directory
+import Text.Read
+
+import Options.Applicative
 
 import Lib
 
@@ -16,6 +20,23 @@ main :: IO ()
 main = do
   opts <- parseOptions
   print opts
+  case opts of
+    Query service -> do
+      allParams <- readParams
+      master <- readMaster
+      print $ query master service allParams
+
+filePath :: IO FilePath
+filePath = (++ "/.config/hashpass/config.hs") <$> getHomeDirectory
+
+readMaster :: IO Master
+readMaster = undefined
+
+readParams :: IO AllParams
+readParams = undefined
+
+writeParams :: AllParams -> IO ()
+writeParams = undefined
 
 parseOptions :: IO Options
 parseOptions = execParser options

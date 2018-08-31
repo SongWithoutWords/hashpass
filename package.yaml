@@ -25,6 +25,7 @@ dependencies:
 - bytestring-conversion
 - containers
 - cryptonite
+- directory
 - integer-logarithms
 - memory
 - optparse-applicative
