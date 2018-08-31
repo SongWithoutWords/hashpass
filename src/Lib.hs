@@ -43,7 +43,7 @@ newtype Master = Master ByteString
 newtype Service = Service ByteString
   deriving(Eq, Show)
 
-newtype Iteration = Iteration Word
+newtype Iteration = Iteration Word64
   deriving(Eq, Num, Show)
 
 newtype Salt = Salt Word64
@@ -58,8 +58,7 @@ data Range
   deriving(Enum, Eq, Ord, Show)
 
 -- The number of characters within each range that are required
--- newtype Requirements = Requirements (TotalMap Range Word8)
-newtype Requirements = Requirements (M.Map Range Word8)
+newtype Requirements = Requirements (M.Map Range Word64)
   deriving(Eq, Show)
 
 data Params = Params
@@ -157,11 +156,11 @@ chooseFromRange r i =
   ( i `div` (toInteger $ rangeCount r)
   , rangeMapping r $ i `mod` (toInteger $ rangeCount r))
 
-chooseRange :: Map Range Word8 -> Integer -> Range
+chooseRange :: Map Range Word64 -> Integer -> Range
 chooseRange ranges roll =
   chooseRange' (M.toList ranges) roll
 
-chooseRange' :: [(Range, Word8)] -> Integer -> Range
+chooseRange' :: [(Range, Word64)] -> Integer -> Range
 chooseRange' [(range, _)] _ = range
 chooseRange' ((range, weight) : rest) roll =
   if roll < toInteger weight
