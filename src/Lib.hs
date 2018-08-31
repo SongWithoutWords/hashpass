@@ -1,9 +1,7 @@
 {-# language GeneralizedNewtypeDeriving #-}
 {-# language OverloadedStrings #-}
 
-module Lib
-    ( someFunc
-    ) where
+module Lib where
 
 import Data.Bits
 import qualified Data.ByteArray as A
@@ -76,11 +74,6 @@ saltValue p = let (Salt s) = salt p in s
 newtype AllParams = AllParams [Params]
   deriving(Eq, Show)
 
-data Command
-  = Add Service Params
-  | Increment Service
-  -- | DisplayAllParams
-  | Query Service
 
 data Result
   = UpdateFile AllParams

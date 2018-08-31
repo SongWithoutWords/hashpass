@@ -27,6 +27,7 @@ dependencies:
 - cryptonite
 - integer-logarithms
 - memory
+- optparse-applicative
 
 library:
   source-dirs: src

@@ -1,6 +1,51 @@
 module Main where
 
+import Options.Applicative
+import Data.Semigroup ((<>))
+
 import Lib
 
+data Options
+  = Add Service Params
+  | Increment Service
+  -- | DisplayAllParams
+  | Query Service
+  deriving(Eq, Show)
+
 main :: IO ()
-main = someFunc
+main = do
+  opts <- parseOptions
+  print opts
+
+parseOptions :: IO Options
+parseOptions = execParser options
+
+options :: ParserInfo Options
+options = info (parser <**> helper) (fullDesc)
+
+parser :: Parser Options
+parser = parseAdd <|> parseIncrement <|> parseQuery -- <|> parseAdd
+
+parseQuery :: Parser Options
+parseQuery = (Query . Service) <$> argument str (metavar "SERVICE")
+
+parseIncrement :: Parser Options
+parseIncrement = (Increment . Service) <$>
+  strOption (
+    long "increment" <>
+    short 'i' <>
+    metavar "SERVICE" <>
+    help "Name of the service to be incremented")
+
+parseAdd :: Parser Options
+parseAdd = -- Add <$>
+  hsubparser $ command "--add" (info asdf (progDesc "asdf"))
+
+asdf :: Parser Options
+asdf = undefined --Service <$> strOption (long "service" <> metavar "SERVICE")
+  -- (Service <$> strOption (
+  --   long "add" <>
+  --   short 'a' <>
+  --   metavar "SERVICE" <>
+  --   help "Name of the service to be incremented"))
+  -- undefined
