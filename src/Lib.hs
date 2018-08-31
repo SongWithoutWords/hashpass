@@ -11,7 +11,6 @@ import qualified Data.ByteString.Internal as B (c2w, w2c)
 import qualified Data.ByteString.Char8 as C8
 import Data.ByteString.Conversion.To
 import Data.ByteString.Conversion.From
-import Data.List(find)
 import Data.Map as M
 import Data.Word
 
@@ -60,7 +59,6 @@ newtype Requirements = Requirements (M.Map Range Word64)
   deriving(Eq, Read, Show)
 
 data Params = Params
-  -- { service :: Service
   { salt :: Salt
   , iteration :: Iteration
   , requirements :: Requirements
@@ -70,20 +68,12 @@ data Params = Params
 saltValue :: Params -> Word64
 saltValue p = let (Salt s) = salt p in s
 
-newtype AllParams = AllParams (Map Service Params) -- [Params]
+newtype AllParams = AllParams (Map Service Params)
   deriving(Eq, Read, Show)
-
 
 data Result
   = UpdateFile AllParams
   | ProvidePassword AllParams
-
--- isService :: Service -> Params -> Bool
--- isService s = (== s) . service
-
--- contains :: Service -> AllParams -> Bool
--- contains s (AllParams allParams) =
---   any (isService s) allParams
 
 add :: Service -> Params -> AllParams -> AllParams
 add service params (AllParams allParams) = AllParams $
@@ -91,21 +81,10 @@ add service params (AllParams allParams) = AllParams $
   where
     addIfNotFound Nothing = Just params
     addIfNotFound (Just existing) = Just existing
-  -- if contains (service params) existing
-  -- then existing
-  -- else
-  --   let AllParams paramsList = existing
-  --   in AllParams $ params : paramsList
 
 increment :: Service -> AllParams -> AllParams
 increment s (AllParams paramList) = AllParams $
   adjust (\p -> p {iteration = (iteration p) + 1}) s paramList
-  -- fmap
-  --   (\params ->
-  --      if isService s params
-  --      then params {iteration = (iteration params) + 1}
-  --      else params)
-  --   paramList
 
 factorial :: Integer -> Integer
 factorial n = if n <= 1 then 1 else n * factorial (n - 1)
@@ -120,7 +99,7 @@ data QueryFailure
   | CryptoFailure CryptoError
   deriving(Eq, Show)
 
-query :: Master -> Service -> AllParams -> Either QueryFailure ByteString -- QueryFailure
+query :: Master -> Service -> AllParams -> Either QueryFailure ByteString
 query m s (AllParams paramList) =
   (case M.lookup s paramList of
     Just params -> Right params
@@ -132,7 +111,7 @@ hashBytes bs = A.convert ((hash bs) :: Digest SHA3_512)
 hashNum :: Word64 -> ByteString
 hashNum = hashBytes . toByteString'
 
-computeHash :: Master -> Service -> Params -> Either QueryFailure ByteString -- QueryFailure
+computeHash :: Master -> Service -> Params -> Either QueryFailure ByteString
 computeHash (Master master) (Service service) (Params (Salt salt) (Iteration iter) reqs) =
   let
     combinedPwHash = hashBytes service <> hashNum iter <> hashBytes master
