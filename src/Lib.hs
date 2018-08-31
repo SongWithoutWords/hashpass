@@ -115,8 +115,8 @@ factorial n = if n <= 1 then 1 else n * factorial (n - 1)
 
 numBytesRequired :: Requirements -> Int
 numBytesRequired (Requirements reqs) = (`div` 8) $ integerLog2 $
-  (factorial $ toInteger $ sum reqs) -- * (product $ map reqs)
-  -- TODO: Add the product of all requirements
+  (factorial $ toInteger $ sum reqs) *
+  (product $ M.mapWithKey (\range count -> (toInteger $ rangeCount range) ^ count) reqs)
 
 data QueryFailure
   = ServiceNotFound Service
