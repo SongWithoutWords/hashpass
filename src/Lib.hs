@@ -6,6 +6,7 @@ module Lib
     ) where
 
 import Data.Bits
+import qualified Data.ByteArray as A
 import Data.ByteString(ByteString)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Internal as B (c2w, w2c)
@@ -18,13 +19,13 @@ import Data.Word
 
 import Math.NumberTheory.Logarithms
 
+import Crypto.Error
 import Crypto.Hash(Digest, hash)
 import Crypto.Hash.Algorithms(SHA3_512)
-import qualified Crypto.KDF.Argon2 as Ar2
--- import qualified Crypto.Scrypt as S
+import qualified Crypto.KDF.Argon2 as Argon2
 
 someFunc :: IO ()
-someFunc = B.putStrLn $ compute (Master "asdf") $ Params
+someFunc = print $ compute (Master "asdf") $ Params
   (Service "snarwalk")
   (Salt 0)
   (Iteration 3)
@@ -117,25 +118,44 @@ numBytesRequired (Requirements reqs) = (`div` 8) $ integerLog2 $
   (factorial $ toInteger $ sum reqs) -- * (product $ map reqs)
   -- TODO: Add the product of all requirements
 
-query :: Master -> Service -> AllParams -> Maybe ByteString
-query m s (AllParams paramList) =
-  compute m <$> find (isService s) paramList
+data QueryFailure
+  = ServiceNotFound Service
+  | CryptoFailure CryptoError
+  deriving(Eq, Show)
 
-compute :: Master -> Params -> ByteString
-compute (Master master) (Params (Service service) (Salt salt) (Iteration iter) reqs) =
-  let digest = hash $
-        hash master <>
-        hash service <>
-        (hash $ toByteString' salt) <>
-        (hash $ toByteString' iter)
-  in passwordFromDigest reqs digest
+query :: Master -> Service -> AllParams -> Either QueryFailure ByteString -- QueryFailure
+query m s (AllParams paramList) =
+  (case find (isService s) paramList of
+    Just params -> Right params
+    Nothing -> Left $ ServiceNotFound s) >>= compute m
+
+hashBytes :: ByteString -> ByteString
+hashBytes bs = A.convert ((hash bs) :: Digest SHA3_512)
+
+hashNum :: Word64 -> ByteString
+hashNum = hashBytes . toByteString'
+
+computeHash :: Master -> Params -> Either QueryFailure ByteString -- QueryFailure
+computeHash (Master master) (Params (Service service) (Salt salt) (Iteration iter) reqs) =
+  let
+    combinedPwHash = hashBytes service <> hashNum iter <> hashBytes master
+    saltHash = hashNum salt
+    outputLength = numBytesRequired reqs
+  in
+    case Argon2.hash Argon2.defaultOptions combinedPwHash saltHash outputLength of
+      CryptoPassed a -> Right $ a -- A.convert a
+      CryptoFailed e -> Left $ CryptoFailure e
+
+compute :: Master -> Params -> Either QueryFailure ByteString
+compute master params =
+  fmap (passwordFromBytes (requirements params)) (computeHash master params)
 
 integerFromBytes :: ByteString -> Integer
 integerFromBytes = B.foldl f 0 where
   f a b = a `shiftL` 8 .|. fromIntegral b
 
-passwordFromDigest :: Requirements -> Digest SHA3_512 -> ByteString
-passwordFromDigest req = (passwordFromInteger req) . integerFromBytes
+passwordFromBytes :: Requirements -> ByteString -> ByteString
+passwordFromBytes req = (passwordFromInteger req) . integerFromBytes
 
 rangeValues :: Range -> [Char]
 rangeValues r = case r of

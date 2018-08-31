@@ -26,6 +26,7 @@ dependencies:
 - containers
 - cryptonite
 - integer-logarithms
+- memory
 
 library:
   source-dirs: src
