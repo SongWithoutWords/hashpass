@@ -157,6 +157,7 @@ integerFromBytes = B.foldl f 0 where
 passwordFromBytes :: Requirements -> ByteString -> ByteString
 passwordFromBytes req = (passwordFromInteger req) . integerFromBytes
 
+-- TODO: Add set of excluded symbols
 rangeValues :: Range -> [Char]
 rangeValues r = case r of
   LowerCase -> ['a' .. 'z']
