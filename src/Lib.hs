@@ -23,8 +23,7 @@ import Crypto.Hash.Algorithms(SHA3_512)
 import qualified Crypto.KDF.Argon2 as Argon2
 
 someFunc :: IO ()
-someFunc = print $ compute (Master "asdf") $ Params
-  (Service "snarwalk")
+someFunc = print $ compute (Master "asdf") (Service "snarwalk") $ Params
   (Salt 0)
   (Iteration 3)
   (Requirements $ M.fromList
@@ -40,13 +39,13 @@ newtype Master = Master ByteString
   deriving(Eq, Show)
 
 newtype Service = Service ByteString
-  deriving(Eq, Show)
+  deriving(Eq, Ord, Read, Show)
 
 newtype Iteration = Iteration Word64
-  deriving(Eq, Num, Show)
+  deriving(Eq, Num, Read, Show)
 
 newtype Salt = Salt Word64
-  deriving(Eq, Show)
+  deriving(Eq, Read, Show)
 
 data Range
   = LowerCase
@@ -54,54 +53,59 @@ data Range
   | Number
   | Symbol
   | Any
-  deriving(Enum, Eq, Ord, Show)
+  deriving(Enum, Eq, Ord, Read, Show)
 
 -- The number of characters within each range that are required
 newtype Requirements = Requirements (M.Map Range Word64)
-  deriving(Eq, Show)
+  deriving(Eq, Read, Show)
 
 data Params = Params
-  { service :: Service
-  , salt :: Salt
+  -- { service :: Service
+  { salt :: Salt
   , iteration :: Iteration
   , requirements :: Requirements
   }
-  deriving(Eq, Show)
+  deriving(Eq, Read, Show)
 
 saltValue :: Params -> Word64
 saltValue p = let (Salt s) = salt p in s
 
-newtype AllParams = AllParams [Params]
-  deriving(Eq, Show)
+newtype AllParams = AllParams (Map Service Params) -- [Params]
+  deriving(Eq, Read, Show)
 
 
 data Result
   = UpdateFile AllParams
   | ProvidePassword AllParams
 
-isService :: Service -> Params -> Bool
-isService s = (== s) . service
+-- isService :: Service -> Params -> Bool
+-- isService s = (== s) . service
 
-contains :: Service -> AllParams -> Bool
-contains s (AllParams allParams) =
-  any (isService s) allParams
+-- contains :: Service -> AllParams -> Bool
+-- contains s (AllParams allParams) =
+--   any (isService s) allParams
 
-add :: Params -> AllParams -> AllParams
-add params existing =
-  if contains (service params) existing
-  then existing
-  else
-    let AllParams paramsList = existing
-    in AllParams $ params : paramsList
+add :: Service -> Params -> AllParams -> AllParams
+add service params (AllParams allParams) = AllParams $
+  alter addIfNotFound service allParams
+  where
+    addIfNotFound Nothing = Just params
+    addIfNotFound (Just existing) = Just existing
+  -- if contains (service params) existing
+  -- then existing
+  -- else
+  --   let AllParams paramsList = existing
+  --   in AllParams $ params : paramsList
 
 increment :: Service -> AllParams -> AllParams
 increment s (AllParams paramList) = AllParams $
-  fmap
-    (\params ->
-       if isService s params
-       then params {iteration = (iteration params) + 1}
-       else params)
-    paramList
+  adjust (\p -> p {iteration = (iteration p) + 1}) s paramList
+  -- fmap
+  --   (\params ->
+  --      if isService s params
+  --      then params {iteration = (iteration params) + 1}
+  --      else params)
+  --   paramList
 
 factorial :: Integer -> Integer
 factorial n = if n <= 1 then 1 else n * factorial (n - 1)
@@ -118,9 +122,9 @@ data QueryFailure
 
 query :: Master -> Service -> AllParams -> Either QueryFailure ByteString -- QueryFailure
 query m s (AllParams paramList) =
-  (case find (isService s) paramList of
+  (case M.lookup s paramList of
     Just params -> Right params
-    Nothing -> Left $ ServiceNotFound s) >>= compute m
+    Nothing -> Left $ ServiceNotFound s) >>= compute m s
 
 hashBytes :: ByteString -> ByteString
 hashBytes bs = A.convert ((hash bs) :: Digest SHA3_512)
@@ -128,20 +132,20 @@ hashBytes bs = A.convert ((hash bs) :: Digest SHA3_512)
 hashNum :: Word64 -> ByteString
 hashNum = hashBytes . toByteString'
 
-computeHash :: Master -> Params -> Either QueryFailure ByteString -- QueryFailure
-computeHash (Master master) (Params (Service service) (Salt salt) (Iteration iter) reqs) =
+computeHash :: Master -> Service -> Params -> Either QueryFailure ByteString -- QueryFailure
+computeHash (Master master) (Service service) (Params (Salt salt) (Iteration iter) reqs) =
   let
     combinedPwHash = hashBytes service <> hashNum iter <> hashBytes master
     saltHash = hashNum salt
     outputLength = numBytesRequired reqs
   in
     case Argon2.hash Argon2.defaultOptions combinedPwHash saltHash outputLength of
-      CryptoPassed a -> Right $ a -- A.convert a
+      CryptoPassed a -> Right $ a
       CryptoFailed e -> Left $ CryptoFailure e
 
-compute :: Master -> Params -> Either QueryFailure ByteString
-compute master params =
-  fmap (passwordFromBytes (requirements params)) (computeHash master params)
+compute :: Master -> Service -> Params -> Either QueryFailure ByteString
+compute master service params =
+  (passwordFromBytes (requirements params)) <$> (computeHash master service params)
 
 integerFromBytes :: ByteString -> Integer
 integerFromBytes = B.foldl f 0 where
