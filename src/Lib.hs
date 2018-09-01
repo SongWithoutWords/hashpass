@@ -21,19 +21,6 @@ import Crypto.Hash(Digest, hash)
 import Crypto.Hash.Algorithms(SHA3_512)
 import qualified Crypto.KDF.Argon2 as Argon2
 
-someFunc :: IO ()
-someFunc = print $ compute (Master "asdf") (Service "snarwalk") $ Recipe
-  (Salt 0)
-  (Version 3)
-  (Requirements $ M.fromList
-   [ (LowerCase, 0)
-   , (UpperCase, 0)
-   , (Number, 0)
-   , (Symbol, 0)
-   , (Any, 255)
-   ]
-  )
-
 newtype Master = Master ByteString
   deriving(Eq, Show)
 
