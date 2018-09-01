@@ -25,6 +25,8 @@ main = do
       allParams <- readParams
       master <- readMaster
       print $ query master service allParams
+    Increment service -> do
+      transformParams $ increment service
 
 -- TODO: Consider using getAppConfigDirectory
 filePath :: IO FilePath
