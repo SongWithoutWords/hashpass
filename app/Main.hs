@@ -30,15 +30,18 @@ main = do
     Add service recipe -> undefined
 
 -- TODO: Consider using getAppConfigDirectory
-filePath :: IO FilePath
-filePath = (++ "/.config/hashpass/config.hs") <$> getHomeDirectory
+configDirectory :: IO FilePath
+configDirectory = (++ "/.config/hashpass") <$> getHomeDirectory
+
+configPath :: IO FilePath
+configPath = (++ "/config.hs") <$> configDirectory
 
 readMaster :: IO Master
 readMaster = undefined
 
 readConfig :: IO Config
 readConfig = do
-  path <- filePath
+  path <- configPath
   configExists <- doesFileExist path
   if configExists
     then read <$> readFile path
@@ -46,7 +49,8 @@ readConfig = do
 
 writeConfig :: Config -> IO ()
 writeConfig params = do
-  path <- filePath
+  configDirectory >>= (createDirectoryIfMissing True)
+  path <- configPath
   writeFile path (show params)
 
 transformConfig :: (Config -> Config) -> IO ()
