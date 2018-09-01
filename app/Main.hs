@@ -26,6 +26,7 @@ main = do
       master <- readMaster
       print $ query master service allParams
 
+-- TODO: Consider using getAppConfigDirectory
 filePath :: IO FilePath
 filePath = (++ "/.config/hashpass/config.hs") <$> getHomeDirectory
 
