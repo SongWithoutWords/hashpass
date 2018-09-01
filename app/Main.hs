@@ -1,16 +1,23 @@
+{-# language ApplicativeDo #-}
+{-# language TupleSections #-}
+
 module Main where
 
+import qualified Data.Map as M
 import Data.Semigroup ((<>))
-import Data.Text.IO
+import Data.Word
+
+-- import Data.Text.IO
 import System.Directory
-import Text.Read
+-- import Text.Read
+-- import Text.Show
 
 import Options.Applicative
 
 import Lib
 
 data Options
-  = Add Service Recipe
+  = Add Service Requirements
   | Increment Service
   -- | DisplayConfig
   | Query Service
@@ -25,9 +32,11 @@ main = do
       config <- readConfig
       master <- readMaster
       print $ query master service config
-    Increment service -> do
+    Increment service ->
       transformConfig $ increment service
-    Add service recipe -> undefined
+    Add service requirements -> do
+      recipe <- newRecipe requirements
+      transformConfig $ add service recipe
 
 -- TODO: Consider using getAppConfigDirectory
 configDirectory :: IO FilePath
@@ -78,13 +87,26 @@ parseIncrement = (Increment . Service) <$>
 
 parseAdd :: Parser Options
 parseAdd = -- Add <$>
-  hsubparser $ command "--add" (info asdf (progDesc "asdf"))
+  hsubparser $ command "add" (info addInfo (progDesc "asdf"))
 
-asdf :: Parser Options
-asdf = undefined --Service <$> strOption (long "service" <> metavar "SERVICE")
-  -- (Service <$> strOption (
-  --   long "add" <>
-  --   short 'a' <>
-  --   metavar "SERVICE" <>
-  --   help "Name of the service to be incremented"))
-  -- undefined
+addInfo :: Parser Options
+addInfo = Add <$>
+  (Service <$> argument str (metavar "SERVICE" <> help "The name of the service for which the password is generated")) <*>
+  (Requirements . M.fromList <$> sequenceA
+    [ characterCountOption LowerCase "lower" 'l' "LOWER_COUNT" "lowercase letters"
+    , characterCountOption UpperCase "upper" 'u' "UPPER_COUNT" "uppercase letters"
+    , characterCountOption Number "number" 'n' "NUMBER_COUNT" "numeric characters"
+    , characterCountOption Symbol "symbol" 's' "SYMBOL_COUNT" "symbolic characters"
+    , characterCountOption Any "any" 'a' "ANY_COUNT" "lowercase, uppercase, numeric, or symbolic characters"
+    ]
+  )
+  where
+    characterCountOption :: Range -> String -> Char -> String -> String -> Parser (Range, Word64)
+    characterCountOption range longName shortName meta helpDesc =
+      (range,) <$> option auto
+        (  long longName
+        <> short shortName
+        <> metavar meta
+        <> help ("The number of " ++ helpDesc ++ " in the generated password")
+        <> value 0
+        )

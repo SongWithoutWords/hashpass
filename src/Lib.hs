@@ -65,6 +65,9 @@ data Recipe = Recipe
   }
   deriving(Eq, Read, Show)
 
+newRecipe :: Requirements -> IO Recipe
+newRecipe = undefined
+
 saltValue :: Recipe -> Word64
 saltValue p = let (Salt s) = salt p in s
 
