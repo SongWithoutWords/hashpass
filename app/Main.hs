@@ -39,7 +39,10 @@ readMaster = undefined
 readConfig :: IO Config
 readConfig = do
   path <- filePath
-  read <$> readFile path
+  configExists <- doesFileExist path
+  if configExists
+    then read <$> readFile path
+    else pure defaultConfig
 
 writeConfig :: Config -> IO ()
 writeConfig params = do

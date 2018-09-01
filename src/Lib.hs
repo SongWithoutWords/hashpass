@@ -71,6 +71,9 @@ saltValue p = let (Salt s) = salt p in s
 newtype Config = Config (Map Service Recipe)
   deriving(Eq, Read, Show)
 
+defaultConfig :: Config
+defaultConfig = Config M.empty
+
 data Result
   = UpdateFile Config
   | ProvidePassword Config
