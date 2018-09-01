@@ -119,12 +119,12 @@ compute :: Master -> Service -> Recipe -> Either QueryFailure ByteString
 compute master service recipe =
   (passwordFromBytes (requirements recipe)) <$> (computeHash master service recipe)
 
-integerFromBytes :: ByteString -> Integer
-integerFromBytes = B.foldl f 0 where
-  f a b = a `shiftL` 8 .|. fromIntegral b
+integralFromBytes :: (Integral a, Bits a) => ByteString -> a
+integralFromBytes = B.foldl f 0 where
+  f x y = x `shiftL` 8 .|. fromIntegral y
 
 passwordFromBytes :: Requirements -> ByteString -> ByteString
-passwordFromBytes req = (passwordFromInteger req) . integerFromBytes
+passwordFromBytes req = (passwordFromInteger req) . integralFromBytes
 
 -- TODO: Add set of excluded symbols
 rangeValues :: Range -> [Char]
