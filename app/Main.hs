@@ -10,9 +10,9 @@ import Options.Applicative
 import Lib
 
 data Options
-  = Add Service Params
+  = Add Service Recipe
   | Increment Service
-  -- | DisplayAllParams
+  -- | DisplayConfig
   | Query Service
   deriving(Eq, Show)
 
@@ -22,11 +22,12 @@ main = do
   print opts
   case opts of
     Query service -> do
-      allParams <- readParams
+      config <- readConfig
       master <- readMaster
-      print $ query master service allParams
+      print $ query master service config
     Increment service -> do
-      transformParams $ increment service
+      transformConfig $ increment service
+    Add service recipe -> undefined
 
 -- TODO: Consider using getAppConfigDirectory
 filePath :: IO FilePath
@@ -35,18 +36,18 @@ filePath = (++ "/.config/hashpass/config.hs") <$> getHomeDirectory
 readMaster :: IO Master
 readMaster = undefined
 
-readParams :: IO AllParams
-readParams = do
+readConfig :: IO Config
+readConfig = do
   path <- filePath
   read <$> readFile path
 
-writeParams :: AllParams -> IO ()
-writeParams params = do
+writeConfig :: Config -> IO ()
+writeConfig params = do
   path <- filePath
   writeFile path (show params)
 
-transformParams :: (AllParams -> AllParams) -> IO ()
-transformParams f = (f <$> readParams) >>= writeParams
+transformConfig :: (Config -> Config) -> IO ()
+transformConfig f = (f <$> readConfig) >>= writeConfig
 
 parseOptions :: IO Options
 parseOptions = execParser options

@@ -22,9 +22,9 @@ import Crypto.Hash.Algorithms(SHA3_512)
 import qualified Crypto.KDF.Argon2 as Argon2
 
 someFunc :: IO ()
-someFunc = print $ compute (Master "asdf") (Service "snarwalk") $ Params
+someFunc = print $ compute (Master "asdf") (Service "snarwalk") $ Recipe
   (Salt 0)
-  (Iteration 3)
+  (Version 3)
   (Requirements $ M.fromList
    [ (LowerCase, 0)
    , (UpperCase, 0)
@@ -40,7 +40,7 @@ newtype Master = Master ByteString
 newtype Service = Service ByteString
   deriving(Eq, Ord, Read, Show)
 
-newtype Iteration = Iteration Word64
+newtype Version = Version Word64
   deriving(Eq, Num, Read, Show)
 
 newtype Salt = Salt Word64
@@ -58,33 +58,33 @@ data Range
 newtype Requirements = Requirements (M.Map Range Word64)
   deriving(Eq, Read, Show)
 
-data Params = Params
+data Recipe = Recipe
   { salt :: Salt
-  , iteration :: Iteration
+  , version :: Version
   , requirements :: Requirements
   }
   deriving(Eq, Read, Show)
 
-saltValue :: Params -> Word64
+saltValue :: Recipe -> Word64
 saltValue p = let (Salt s) = salt p in s
 
-newtype AllParams = AllParams (Map Service Params)
+newtype Config = Config (Map Service Recipe)
   deriving(Eq, Read, Show)
 
 data Result
-  = UpdateFile AllParams
-  | ProvidePassword AllParams
+  = UpdateFile Config
+  | ProvidePassword Config
 
-add :: Service -> Params -> AllParams -> AllParams
-add service params (AllParams allParams) = AllParams $
-  alter addIfNotFound service allParams
+add :: Service -> Recipe -> Config -> Config
+add service recipe (Config allRecipe) = Config $
+  alter addIfNotFound service allRecipe
   where
-    addIfNotFound Nothing = Just params
+    addIfNotFound Nothing = Just recipe
     addIfNotFound (Just existing) = Just existing
 
-increment :: Service -> AllParams -> AllParams
-increment s (AllParams paramList) = AllParams $
-  adjust (\p -> p {iteration = (iteration p) + 1}) s paramList
+increment :: Service -> Config -> Config
+increment s (Config paramList) = Config $
+  adjust (\p -> p {version = (version p) + 1}) s paramList
 
 factorial :: Integer -> Integer
 factorial n = if n <= 1 then 1 else n * factorial (n - 1)
@@ -99,10 +99,10 @@ data QueryFailure
   | CryptoFailure CryptoError
   deriving(Eq, Show)
 
-query :: Master -> Service -> AllParams -> Either QueryFailure ByteString
-query m s (AllParams paramList) =
+query :: Master -> Service -> Config -> Either QueryFailure ByteString
+query m s (Config paramList) =
   (case M.lookup s paramList of
-    Just params -> Right params
+    Just recipe -> Right recipe
     Nothing -> Left $ ServiceNotFound s) >>= compute m s
 
 hashBytes :: ByteString -> ByteString
@@ -111,10 +111,10 @@ hashBytes bs = A.convert ((hash bs) :: Digest SHA3_512)
 hashNum :: Word64 -> ByteString
 hashNum = hashBytes . toByteString'
 
-computeHash :: Master -> Service -> Params -> Either QueryFailure ByteString
-computeHash (Master master) (Service service) (Params (Salt salt) (Iteration iter) reqs) =
+computeHash :: Master -> Service -> Recipe -> Either QueryFailure ByteString
+computeHash (Master master) (Service service) (Recipe (Salt salt) (Version ver) reqs) =
   let
-    combinedPwHash = hashBytes service <> hashNum iter <> hashBytes master
+    combinedPwHash = hashBytes service <> hashNum ver <> hashBytes master
     saltHash = hashNum salt
     outputLength = numBytesRequired reqs
   in
@@ -122,9 +122,9 @@ computeHash (Master master) (Service service) (Params (Salt salt) (Iteration ite
       CryptoPassed a -> Right $ a
       CryptoFailed e -> Left $ CryptoFailure e
 
-compute :: Master -> Service -> Params -> Either QueryFailure ByteString
-compute master service params =
-  (passwordFromBytes (requirements params)) <$> (computeHash master service params)
+compute :: Master -> Service -> Recipe -> Either QueryFailure ByteString
+compute master service recipe =
+  (passwordFromBytes (requirements recipe)) <$> (computeHash master service recipe)
 
 integerFromBytes :: ByteString -> Integer
 integerFromBytes = B.foldl f 0 where
