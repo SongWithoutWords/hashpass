@@ -3,6 +3,7 @@
 
 module Main where
 
+import qualified Data.ByteString as B
 import qualified Data.Map as M
 import Data.Semigroup ((<>))
 import Data.Word
@@ -45,8 +46,9 @@ configDirectory = (++ "/.config/hashpass") <$> getHomeDirectory
 configPath :: IO FilePath
 configPath = (++ "/config.hs") <$> configDirectory
 
+-- TODO: Proper conceiled password reading
 readMaster :: IO Master
-readMaster = undefined
+readMaster = Master <$> B.getLine
 
 readConfig :: IO Config
 readConfig = do
