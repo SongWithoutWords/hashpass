@@ -20,6 +20,7 @@ import Crypto.Error
 import Crypto.Hash(Digest, hash)
 import Crypto.Hash.Algorithms(SHA3_512)
 import qualified Crypto.KDF.Argon2 as Argon2
+import Crypto.Random(getRandomBytes)
 
 newtype Master = Master ByteString
   deriving(Eq, Show)
@@ -53,10 +54,9 @@ data Recipe = Recipe
   deriving(Eq, Read, Show)
 
 newRecipe :: Requirements -> IO Recipe
-newRecipe = undefined
-
-saltValue :: Recipe -> Word64
-saltValue p = let (Salt s) = salt p in s
+newRecipe reqs = do
+  salt <- integralFromBytes <$> getRandomBytes 8
+  pure $ Recipe (Salt salt) 0 reqs
 
 newtype Config = Config (Map Service Recipe)
   deriving(Eq, Read, Show)
