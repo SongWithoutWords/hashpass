@@ -30,6 +30,7 @@ dependencies:
 - integer-logarithms
 - memory
 - optparse-applicative
+- pretty-show
 
 library:
   source-dirs: src

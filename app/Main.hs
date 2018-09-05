@@ -12,6 +12,7 @@ import Data.Word
 import System.Directory
 -- import Text.Read
 -- import Text.Show
+import Text.Show.Pretty
 
 import Options.Applicative
 
@@ -62,7 +63,7 @@ writeConfig :: Config -> IO ()
 writeConfig params = do
   configDirectory >>= (createDirectoryIfMissing True)
   path <- configPath
-  writeFile path (show params)
+  writeFile path (ppShow params)
 
 transformConfig :: (Config -> Config) -> IO ()
 transformConfig f = (f <$> readConfig) >>= writeConfig
