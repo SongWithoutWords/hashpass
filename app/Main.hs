@@ -19,7 +19,7 @@ import Options.Applicative
 import Lib
 
 data Options
-  = Add Service Requirements
+  = Add Service Requirements Disallowed
   | Increment Service
   -- | DisplayConfig
   | Query Service
@@ -36,8 +36,8 @@ main = do
       print $ query master service config
     Increment service ->
       transformConfig $ increment service
-    Add service requirements -> do
-      recipe <- newRecipe requirements
+    Add service requirements disallowed -> do
+      recipe <- newRecipe requirements disallowed
       transformConfig $ add service recipe
 
 -- TODO: Consider using getAppConfigDirectory
@@ -94,15 +94,23 @@ parseAdd = -- Add <$>
 
 addInfo :: Parser Options
 addInfo = Add <$>
-  (Service <$> argument str (metavar "SERVICE" <> help "The name of the service for which the password is generated")) <*>
-  (Requirements . M.fromList <$> sequenceA
-    [ characterCountOption LowerCase "lower" 'l' "LOWER_COUNT" "lowercase letters"
-    , characterCountOption UpperCase "upper" 'u' "UPPER_COUNT" "uppercase letters"
-    , characterCountOption Number "number" 'n' "NUMBER_COUNT" "numeric characters"
-    , characterCountOption Symbol "symbol" 's' "SYMBOL_COUNT" "symbolic characters"
-    , characterCountOption Any "any" 'a' "ANY_COUNT" "lowercase, uppercase, numeric, or symbolic characters"
-    ]
-  )
+  (Service <$> argument str
+    (metavar "SERVICE" <> help "The name of the service for which the password is generated")) <*>
+    (Requirements . M.fromList <$> sequenceA
+      [ characterCountOption LowerCase "lower" 'l' "LOWER_COUNT" "lowercase letters"
+      , characterCountOption UpperCase "upper" 'u' "UPPER_COUNT" "uppercase letters"
+      , characterCountOption Number "number" 'n' "NUMBER_COUNT" "numeric characters"
+      , characterCountOption Symbol "symbol" 's' "SYMBOL_COUNT" "symbolic characters"
+      , characterCountOption Any "any" 'a' "ANY_COUNT" "lowercase, uppercase, numeric, or symbolic characters"
+      ]
+    ) <*>
+    (Disallowed <$> strOption
+     (  long "disallowed"
+     <> short 'd'
+     <> metavar "DISALLOWED_CHARACTERS"
+     <> help "A string of characters that are not allowed in the generated password"
+     <> value ['"', '\\']
+     ))
   where
     characterCountOption :: Range -> String -> Char -> String -> String -> Parser (Range, Word64)
     characterCountOption range longName shortName meta helpDesc =
@@ -111,5 +119,5 @@ addInfo = Add <$>
         <> short shortName
         <> metavar meta
         <> help ("The number of " ++ helpDesc ++ " in the generated password")
-        <> value 0
+        <> value 4
         )

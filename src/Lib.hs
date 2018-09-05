@@ -46,17 +46,21 @@ data Range
 newtype Requirements = Requirements (M.Map Range Word64)
   deriving(Eq, Read, Show)
 
+newtype Disallowed = Disallowed [Char]
+  deriving(Eq, Read, Show)
+
 data Recipe = Recipe
   { salt :: Salt
   , version :: Version
   , requirements :: Requirements
+  , disallowed :: Disallowed
   }
   deriving(Eq, Read, Show)
 
-newRecipe :: Requirements -> IO Recipe
-newRecipe reqs = do
+newRecipe :: Requirements -> Disallowed -> IO Recipe
+newRecipe reqs dis = do
   salt <- integralFromBytes <$> getRandomBytes 8
-  pure $ Recipe (Salt salt) 0 reqs
+  pure $ Recipe (Salt salt) 0 reqs dis
 
 newtype Config = Config (Map Service Recipe)
   deriving(Eq, Read, Show)
@@ -105,7 +109,7 @@ hashNum :: Word64 -> ByteString
 hashNum = hashBytes . toByteString'
 
 computeHash :: Master -> Service -> Recipe -> Either QueryFailure ByteString
-computeHash (Master master) (Service service) (Recipe (Salt salt) (Version ver) reqs) =
+computeHash (Master master) (Service service) (Recipe (Salt salt) (Version ver) reqs dis) =
   let
     combinedPwHash = hashBytes service <> hashNum ver <> hashBytes master
     saltHash = hashNum salt
