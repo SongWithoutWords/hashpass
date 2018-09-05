@@ -11,7 +11,7 @@ import qualified Data.ByteString.Internal as B (c2w, w2c)
 import qualified Data.ByteString.Char8 as C8
 import Data.ByteString.Conversion.To
 import Data.ByteString.Conversion.From
-import Data.Map as M
+import qualified Data.Map as M
 import Data.Word
 
 import Math.NumberTheory.Logarithms
@@ -57,12 +57,19 @@ data Recipe = Recipe
   }
   deriving(Eq, Read, Show)
 
+data Recipe' = Recipe' Salt Version Requirements RangeValues
+  deriving(Eq, Read, Show)
+
+mapRecipe :: Recipe -> Recipe'
+mapRecipe (Recipe salt version reqs dis) =
+  Recipe' salt version reqs $ makeRangeValues dis
+
 newRecipe :: Requirements -> Disallowed -> IO Recipe
 newRecipe reqs dis = do
   salt <- integralFromBytes <$> getRandomBytes 8
   pure $ Recipe (Salt salt) 0 reqs dis
 
-newtype Config = Config (Map Service Recipe)
+newtype Config = Config (M.Map Service Recipe)
   deriving(Eq, Read, Show)
 
 defaultConfig :: Config
@@ -74,22 +81,22 @@ data Result
 
 add :: Service -> Recipe -> Config -> Config
 add service recipe (Config allRecipe) = Config $
-  alter addIfNotFound service allRecipe
+  M.alter addIfNotFound service allRecipe
   where
     addIfNotFound Nothing = Just recipe
     addIfNotFound (Just existing) = Just existing
 
 increment :: Service -> Config -> Config
 increment s (Config paramList) = Config $
-  adjust (\p -> p {version = (version p) + 1}) s paramList
+  M.adjust (\p -> p {version = (version p) + 1}) s paramList
 
 factorial :: Integer -> Integer
 factorial n = if n <= 1 then 1 else n * factorial (n - 1)
 
-numBytesRequired :: Requirements -> Int
-numBytesRequired (Requirements reqs) = (`div` 8) $ integerLog2 $
+numBytesRequired :: Requirements -> RangeValues -> Int
+numBytesRequired (Requirements reqs) rangeValues = (`div` 8) $ integerLog2 $
   (factorial $ toInteger $ sum reqs) *
-  (product $ M.mapWithKey (\range count -> (toInteger $ rangeCount range) ^ count) reqs)
+  (product $ M.mapWithKey (\range count -> (toInteger $ length $ rangeValues M.! range) ^ count) reqs)
 
 data QueryFailure
   = ServiceNotFound Service
@@ -108,12 +115,12 @@ hashBytes bs = A.convert ((hash bs) :: Digest SHA3_512)
 hashNum :: Word64 -> ByteString
 hashNum = hashBytes . toByteString'
 
-computeHash :: Master -> Service -> Recipe -> Either QueryFailure ByteString
-computeHash (Master master) (Service service) (Recipe (Salt salt) (Version ver) reqs dis) =
+computeHash :: Master -> Service -> Recipe' -> Either QueryFailure ByteString
+computeHash (Master master) (Service service) (Recipe' (Salt salt) (Version ver) reqs rangeValues) =
   let
     combinedPwHash = hashBytes service <> hashNum ver <> hashBytes master
     saltHash = hashNum salt
-    outputLength = numBytesRequired reqs
+    outputLength = numBytesRequired reqs rangeValues
   in
     case Argon2.hash Argon2.defaultOptions combinedPwHash saltHash outputLength of
       CryptoPassed a -> Right $ a
@@ -121,36 +128,38 @@ computeHash (Master master) (Service service) (Recipe (Salt salt) (Version ver) 
 
 compute :: Master -> Service -> Recipe -> Either QueryFailure ByteString
 compute master service recipe =
-  (passwordFromBytes (requirements recipe)) <$> (computeHash master service recipe)
+  let recipe' = mapRecipe recipe
+  in (passwordFromBytes recipe') <$> (computeHash master service recipe')
 
 integralFromBytes :: (Integral a, Bits a) => ByteString -> a
 integralFromBytes = B.foldl f 0 where
   f x y = x `shiftL` 8 .|. fromIntegral y
 
-passwordFromBytes :: Requirements -> ByteString -> ByteString
-passwordFromBytes req = (passwordFromInteger req) . integralFromBytes
+passwordFromBytes :: Recipe' -> ByteString -> ByteString
+passwordFromBytes (Recipe' _ _ reqs rangeValues) =
+  (passwordFromInteger reqs rangeValues) . integralFromBytes
 
--- TODO: Add set of excluded symbols
-rangeValues :: Range -> [Char]
-rangeValues r = case r of
+defaultRangeValues :: Range -> [Char]
+defaultRangeValues r = case r of
   LowerCase -> ['a' .. 'z']
   UpperCase -> ['A' .. 'X']
   Number -> ['0' .. '9']
   Symbol -> ['!' .. '/'] ++ [':' .. '@'] ++ ['[' .. '`'] ++ ['{' .. '~']
-  Any -> concatMap rangeValues [LowerCase .. Symbol]
+  Any -> concatMap defaultRangeValues [LowerCase .. Symbol]
 
-rangeCount :: Range -> Int
-rangeCount = length . rangeValues
+type RangeValues = M.Map Range [Char]
 
-rangeMapping :: Range -> Integer -> Char
-rangeMapping r i = (rangeValues r) !! fromIntegral i
+makeRangeValues :: Disallowed -> RangeValues
+makeRangeValues (Disallowed disallowed) = M.fromList $
+  (\range -> (range, removeDisallowed $ defaultRangeValues range)) <$> [LowerCase .. Any]
+  where removeDisallowed chars = filter (\c -> not $ elem c disallowed) chars
 
-chooseFromRange :: Range -> Integer -> (Integer, Char)
-chooseFromRange r i =
-  ( i `div` (toInteger $ rangeCount r)
-  , rangeMapping r $ i `mod` (toInteger $ rangeCount r))
+chooseFromRange :: [Char] -> Integer -> (Integer, Char)
+chooseFromRange rangeValues i =
+  ( i `div` (toInteger $ length rangeValues)
+  , rangeValues !! (fromIntegral $ i `mod` (toInteger $ length rangeValues)))
 
-chooseRange :: Map Range Word64 -> Integer -> Range
+chooseRange :: M.Map Range Word64 -> Integer -> Range
 chooseRange ranges roll =
   chooseRange' (M.toList ranges) roll
 
@@ -161,8 +170,8 @@ chooseRange' ((range, weight) : rest) roll =
   then range
   else chooseRange' rest (roll - toInteger weight)
 
-passwordFromInteger :: Requirements -> Integer -> ByteString
-passwordFromInteger (Requirements rangeWeights) i =
+passwordFromInteger :: Requirements -> RangeValues -> Integer -> ByteString
+passwordFromInteger (Requirements rangeWeights) rangeValues i =
   let
     weightSum = toInteger $ M.foldl' (+) 0 rangeWeights
     rangeChoiceIndex = i `mod` weightSum
@@ -170,5 +179,6 @@ passwordFromInteger (Requirements rangeWeights) i =
   in if weightSum <= 0 then ""
   else let
     range = chooseRange rangeWeights rangeChoiceIndex
-    (i'', char) = chooseFromRange range i'
-  in C8.cons char $ passwordFromInteger (Requirements $ M.adjust (subtract 1) range rangeWeights) i''
+    (i'', char) = chooseFromRange (rangeValues M.! range) i'
+  in C8.cons char $
+    passwordFromInteger (Requirements $ M.adjust (subtract 1) range rangeWeights) rangeValues i''
