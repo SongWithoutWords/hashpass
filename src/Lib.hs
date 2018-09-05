@@ -49,12 +49,7 @@ newtype Requirements = Requirements (M.Map Range Word64)
 newtype Disallowed = Disallowed [Char]
   deriving(Eq, Read, Show)
 
-data Recipe = Recipe
-  { salt :: Salt
-  , version :: Version
-  , requirements :: Requirements
-  , disallowed :: Disallowed
-  }
+data Recipe = Recipe Salt Version Requirements Disallowed
   deriving(Eq, Read, Show)
 
 data Recipe' = Recipe' Salt Version Requirements RangeValues
@@ -87,8 +82,8 @@ add service recipe (Config allRecipe) = Config $
     addIfNotFound (Just existing) = Just existing
 
 increment :: Service -> Config -> Config
-increment s (Config paramList) = Config $
-  M.adjust (\p -> p {version = (version p) + 1}) s paramList
+increment service (Config paramList) = Config $
+  M.adjust (\(Recipe s v r d) -> (Recipe s (v + 1) r d)) service paramList
 
 factorial :: Integer -> Integer
 factorial n = if n <= 1 then 1 else n * factorial (n - 1)
